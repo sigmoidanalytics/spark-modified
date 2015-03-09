@@ -18,6 +18,7 @@
 package org.apache.spark.streaming.dstream
 
 import java.io.{IOException, ObjectInputStream}
+import java.util
 
 import scala.collection.mutable
 import scala.reflect.ClassTag
@@ -67,19 +68,21 @@ import org.apache.spark.util.{TimeStampedHashMap, Utils}
  *   processing semantics are undefined.
  */
 private[streaming]
-class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : ClassTag](
-    @transient ssc_ : StreamingContext,
-    directory: String,
-    filter: Path => Boolean = FileInputDStream.defaultFilter,
-    newFilesOnly: Boolean = true,
-    recursive: Boolean = false)
+class FileInputDStream[K: ClassTag,
+    V: ClassTag,
+    F <: NewInputFormat[K,V] : ClassTag](
+     @transient ssc_ : StreamingContext,
+     directory: String,
+     filter: Path => Boolean = FileInputDStream.defaultFilter,
+     newFilesOnly: Boolean = true,
+     recursive: Boolean = false)
   extends InputDStream[(K, V)](ssc_) {
 
 
   def this(@transient ssc_ : StreamingContext,
-            directory: String,
-            filter: Path => Boolean,
-            newFilesOnly: Boolean){
+           directory: String,
+           filter: Path => Boolean,
+           newFilesOnly: Boolean){
 
     this(ssc_,directory,filter,newFilesOnly,false)
 
@@ -107,6 +110,8 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
   private val durationToRemember = slideDuration * numBatchesToRemember
 
   private var recursiveMinTime = 0L
+
+  private var filesList: List[Path] = List[Path]()
 
   remember(durationToRemember)
 
@@ -162,14 +167,19 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
     fileToModTime.clearOldValues(lastNewFileFindingTime - 1)
   }
 
-  private def recursiveFileList(fileStatuses: List[FileStatus],
-    paths: List[Path] = List[Path]()): List[Path] = fileStatuses match {
-      case f :: tail if (fs.getContentSummary(f.getPath).getDirectoryCount > 1) =>
-      recursiveFileList(fs.listStatus(f.getPath).toList ::: tail, paths)
-      case f :: tail if f.isDir => recursiveFileList(tail, f.getPath :: paths)
-      case f :: tail => recursiveFileList(tail, paths)
-      case _ => paths
-     }
+  private def recursiveFileList(dirpath: Path): Unit ={
+    try{
+      val status_list = fs.listStatus(dirpath)
+      for(status <- status_list){
+        if(status.isDir){
+          recursiveFileList(status.getPath)
+        }else{
+          filesList = filesList :+ status.getPath
+        }
+      }
+    }catch { case e: Exception => logWarning("====>>>> Empty Directory! " + dirpath.toString) }
+
+  }
 
   /**
    * Find new files for the batch of `currentTime`. This is done by first calculating the
@@ -194,10 +204,11 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
       }
       //val newFiles = fs.listStatus(directoryPath, filter).map(_.getPath.toString)
       val filePaths: Array[Path] = if (recursive){
-         recursiveFileList(fs.listStatus(directoryPath).toList).toArray
+        recursiveFileList(directoryPath)
+        filesList.toArray
       }
       else{
-         Array(directoryPath)
+        Array(directoryPath)
       }
 
       val newFiles: Array[String] = fs.listStatus(filePaths, filter).map(_.getPath.toString)
@@ -367,4 +378,3 @@ object FileInputDStream {
     math.ceil(MIN_REMEMBER_DURATION.milliseconds.toDouble / batchDuration.milliseconds).toInt
   }
 }
-
