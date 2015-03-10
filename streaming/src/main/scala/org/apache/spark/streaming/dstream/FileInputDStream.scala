@@ -111,6 +111,8 @@ class FileInputDStream[K: ClassTag,
 
   private var recursiveMinTime = 0L
 
+  private def clock = ssc.scheduler.clock
+
   private var filesList: List[Path] = List[Path]()
 
   remember(durationToRemember)
@@ -174,6 +176,7 @@ class FileInputDStream[K: ClassTag,
         if(status.isDir){
           recursiveFileList(status.getPath)
         }else{
+          //logInfo("Found file : " + status.getPath)
           filesList = filesList :+ status.getPath
         }
       }
@@ -190,7 +193,7 @@ class FileInputDStream[K: ClassTag,
    */
   private def findNewFiles(currentTime: Long): Array[String] = {
     try {
-      lastNewFileFindingTime = System.currentTimeMillis
+      lastNewFileFindingTime = clock.currentTime()
 
       // Calculate ignore threshold
       val modTimeIgnoreThreshold = math.max(
@@ -203,6 +206,7 @@ class FileInputDStream[K: ClassTag,
         def accept(path: Path): Boolean = isNewFile(path, currentTime, modTimeIgnoreThreshold)
       }
       //val newFiles = fs.listStatus(directoryPath, filter).map(_.getPath.toString)
+      filesList = List[Path]()
       val filePaths: Array[Path] = if (recursive){
         recursiveFileList(directoryPath)
         filesList.toArray
@@ -214,7 +218,7 @@ class FileInputDStream[K: ClassTag,
       val newFiles: Array[String] = fs.listStatus(filePaths, filter).map(_.getPath.toString)
       //logInfo("minNewFileModTime: " ++ filter.minNewFileModTime.toString)
 
-      val timeTaken = System.currentTimeMillis - lastNewFileFindingTime
+      val timeTaken = clock.currentTime() - lastNewFileFindingTime
       logInfo("Finding new files took " + timeTaken + " ms")
       logDebug("# cached file times = " + fileToModTime.size)
       if (timeTaken > slideDuration.milliseconds) {
@@ -378,3 +382,4 @@ object FileInputDStream {
     math.ceil(MIN_REMEMBER_DURATION.milliseconds.toDouble / batchDuration.milliseconds).toInt
   }
 }
+
