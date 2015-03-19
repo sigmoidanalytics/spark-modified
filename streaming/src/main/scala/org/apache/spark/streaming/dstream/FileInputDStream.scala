@@ -217,9 +217,10 @@ class FileInputDStream[K: ClassTag,
 
     val client = new AmazonS3Client(creds)
 
-    val bucketName = directoryPath.getName.split("/")(0)
-    val prefix = directoryPath.getName.substring(directoryPath.getName.split("/")(0).length,
-                        directoryPath.getName.length)
+    val bucketName = directoryPath.toString.split("/")(0)
+    val prefix = directoryPath.toString.substring(
+          directoryPath.toString.split("/")(0).length + 1,
+                                      directoryPath.toString.length)
 
     logInfo("Looking in Bucket : " + bucketName +
              " with prefix :" + prefix)
