@@ -249,9 +249,9 @@ class FileInputDStream[K: ClassTag,
           "s3n://" + System.getenv("AWS_ACCESS_KEY") + ":" +
             System.getenv("AWS_SECRET_KEY") + "@" +
             summary.getBucketName + "/" + summary.getKey
-        /*logInfo("Found new File: " + "s3n://" + System.getenv("AWS_ACCESS_KEY") + ":" +
-          System.getenv("AWS_SECRET_KEY") + "@" +
-          summary.getBucketName + "/" + summary.getKey)*/
+        logInfo("Found new File: " + "s3n://" + System.getenv("AWS_ACCESS_KEY") + ":" +
+           "@" +
+          summary.getBucketName + "/" + summary.getKey)
       }
     }
 
