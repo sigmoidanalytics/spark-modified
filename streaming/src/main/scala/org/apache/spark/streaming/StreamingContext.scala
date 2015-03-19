@@ -51,10 +51,10 @@ import org.apache.spark.streaming.ui.{StreamingJobProgressListener, StreamingTab
  * of the context by `stop()` or by an exception.
  */
 class StreamingContext private[streaming] (
-    sc_ : SparkContext,
-    cp_ : Checkpoint,
-    batchDur_ : Duration
-  ) extends Logging {
+                                            sc_ : SparkContext,
+                                            cp_ : Checkpoint,
+                                            batchDur_ : Duration
+                                            ) extends Logging {
 
   /**
    * Create a StreamingContext using an existing SparkContext.
@@ -81,14 +81,14 @@ class StreamingContext private[streaming] (
    * @param batchDuration the time interval at which streaming data will be divided into batches
    */
   def this(
-      master: String,
-      appName: String,
-      batchDuration: Duration,
-      sparkHome: String = null,
-      jars: Seq[String] = Nil,
-      environment: Map[String, String] = Map()) = {
+            master: String,
+            appName: String,
+            batchDuration: Duration,
+            sparkHome: String = null,
+            jars: Seq[String] = Nil,
+            environment: Map[String, String] = Map()) = {
     this(StreamingContext.createNewSparkContext(master, appName, sparkHome, jars, environment),
-         null, batchDuration)
+      null, batchDuration)
   }
 
   /**
@@ -232,7 +232,7 @@ class StreamingContext private[streaming] (
    */
   @deprecated("Use receiverStream", "1.0.0")
   def networkStream[T: ClassTag](
-    receiver: Receiver[T]): ReceiverInputDStream[T] = {
+                                  receiver: Receiver[T]): ReceiverInputDStream[T] = {
     receiverStream(receiver)
   }
 
@@ -242,7 +242,7 @@ class StreamingContext private[streaming] (
    * @param receiver Custom implementation of Receiver
    */
   def receiverStream[T: ClassTag](
-    receiver: Receiver[T]): ReceiverInputDStream[T] = {
+                                   receiver: Receiver[T]): ReceiverInputDStream[T] = {
     new PluggableInputDStream[T](this, receiver)
   }
 
@@ -259,11 +259,12 @@ class StreamingContext private[streaming] (
    *       should be same.
    */
   def actorStream[T: ClassTag](
-      props: Props,
-      name: String,
-      storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2,
-      supervisorStrategy: SupervisorStrategy = ActorSupervisorStrategy.defaultStrategy
-    ): ReceiverInputDStream[T] = {
+                                props: Props,
+                                name: String,
+                                storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2,
+                                supervisorStrategy: SupervisorStrategy =
+                                ActorSupervisorStrategy.defaultStrategy
+                                ): ReceiverInputDStream[T] = {
     receiverStream(new ActorReceiver[T](props, name, storageLevel, supervisorStrategy))
   }
 
@@ -277,10 +278,10 @@ class StreamingContext private[streaming] (
    *                      (default: StorageLevel.MEMORY_AND_DISK_SER_2)
    */
   def socketTextStream(
-      hostname: String,
-      port: Int,
-      storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
-    ): ReceiverInputDStream[String] = {
+                        hostname: String,
+                        port: Int,
+                        storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
+                        ): ReceiverInputDStream[String] = {
     socketStream[String](hostname, port, SocketReceiver.bytesToLines, storageLevel)
   }
 
@@ -295,11 +296,11 @@ class StreamingContext private[streaming] (
    * @tparam T            Type of the objects received (after converting bytes to objects)
    */
   def socketStream[T: ClassTag](
-      hostname: String,
-      port: Int,
-      converter: (InputStream) => Iterator[T],
-      storageLevel: StorageLevel
-    ): ReceiverInputDStream[T] = {
+                                 hostname: String,
+                                 port: Int,
+                                 converter: (InputStream) => Iterator[T],
+                                 storageLevel: StorageLevel
+                                 ): ReceiverInputDStream[T] = {
     new SocketInputDStream[T](this, hostname, port, converter, storageLevel)
   }
 
@@ -315,10 +316,10 @@ class StreamingContext private[streaming] (
    * @tparam T            Type of the objects in the received blocks
    */
   def rawSocketStream[T: ClassTag](
-      hostname: String,
-      port: Int,
-      storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
-    ): ReceiverInputDStream[T] = {
+                                    hostname: String,
+                                    port: Int,
+                                    storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
+                                    ): ReceiverInputDStream[T] = {
     new RawInputDStream[T](this, hostname, port, storageLevel)
   }
 
@@ -332,22 +333,37 @@ class StreamingContext private[streaming] (
    * @tparam V Value type for reading HDFS file
    * @tparam F Input format for reading HDFS file
    */
-def fileStream[
-    K: ClassTag,
-    V: ClassTag,
-    F <: NewInputFormat[K, V]: ClassTag
+  def fileStream[
+  K: ClassTag,
+  V: ClassTag,
+  F <: NewInputFormat[K, V]: ClassTag
   ] (directory: String): InputDStream[(K, V)] = {
     new FileInputDStream[K, V, F](this, directory)
   }
 
-   def fileStream[ 
-     K: ClassTag, 
-     V: ClassTag, 
-     F <: NewInputFormat[K, V]: ClassTag 
-   ] (directory: String, filter: Path => Boolean, newFilesOnly: Boolean,
-      recursive: Boolean): DStream[(K, V)] = { 
-     new FileInputDStream[K, V, F](this, directory, filter, newFilesOnly, recursive) 
-   }
+  /**
+   * This one's for Recurssive files finding.
+   */
+  def fileStream[
+  K: ClassTag,
+  V: ClassTag,
+  F <: NewInputFormat[K, V]: ClassTag
+  ] (directory: String, filter: Path => Boolean, newFilesOnly: Boolean,
+     recursive: Boolean): DStream[(K, V)] = {
+    new FileInputDStream[K, V, F](this, directory, filter, newFilesOnly, recursive)
+  }
+
+  /**
+   * This one's optimized for S3
+   */
+  def s3FileStream[
+  K: ClassTag,
+  V: ClassTag,
+  F <: NewInputFormat[K, V]: ClassTag
+  ] (directory: String): DStream[(K, V)] = {
+    new FileInputDStream[K, V, F](this, directory, null, false, true, true)
+  }
+
   /**
    * Create a input stream that monitors a Hadoop-compatible filesystem
    * for new files and reads them using the given key-value types and input format.
@@ -361,9 +377,9 @@ def fileStream[
    * @tparam F Input format for reading HDFS file
    */
   def fileStream[
-    K: ClassTag,
-    V: ClassTag,
-    F <: NewInputFormat[K, V]: ClassTag
+  K: ClassTag,
+  V: ClassTag,
+  F <: NewInputFormat[K, V]: ClassTag
   ] (directory: String, filter: Path => Boolean, newFilesOnly: Boolean): InputDStream[(K, V)] = {
     new FileInputDStream[K, V, F](this, directory, filter, newFilesOnly)
   }
@@ -388,9 +404,9 @@ def fileStream[
    * @tparam T         Type of objects in the RDD
    */
   def queueStream[T: ClassTag](
-      queue: Queue[RDD[T]],
-      oneAtATime: Boolean = true
-    ): InputDStream[T] = {
+                                queue: Queue[RDD[T]],
+                                oneAtATime: Boolean = true
+                                ): InputDStream[T] = {
     queueStream(queue, oneAtATime, sc.makeRDD(Seq[T](), 1))
   }
 
@@ -404,10 +420,10 @@ def fileStream[
    * @tparam T         Type of objects in the RDD
    */
   def queueStream[T: ClassTag](
-      queue: Queue[RDD[T]],
-      oneAtATime: Boolean,
-      defaultRDD: RDD[T]
-    ): InputDStream[T] = {
+                                queue: Queue[RDD[T]],
+                                oneAtATime: Boolean,
+                                defaultRDD: RDD[T]
+                                ): InputDStream[T] = {
     new QueueInputDStream(this, queue, oneAtATime, defaultRDD)
   }
 
@@ -423,9 +439,9 @@ def fileStream[
    * the DStreams.
    */
   def transform[T: ClassTag](
-      dstreams: Seq[DStream[_]],
-      transformFunc: (Seq[RDD[_]], Time) => RDD[T]
-    ): DStream[T] = {
+                              dstreams: Seq[DStream[_]],
+                              transformFunc: (Seq[RDD[_]], Time) => RDD[T]
+                              ): DStream[T] = {
     new TransformedDStream[T](dstreams, sparkContext.clean(transformFunc))
   }
 
@@ -532,7 +548,7 @@ object StreamingContext extends Logging {
   private[streaming] val DEFAULT_CLEANER_TTL = 3600
 
   implicit def toPairDStreamFunctions[K, V](stream: DStream[(K, V)])
-      (implicit kt: ClassTag[K], vt: ClassTag[V], ord: Ordering[K] = null) = {
+       (implicit kt: ClassTag[K], vt: ClassTag[V], ord: Ordering[K] = null) = {
     new PairDStreamFunctions[K, V](stream)
   }
 
@@ -551,11 +567,11 @@ object StreamingContext extends Logging {
    *                       thrown on error.
    */
   def getOrCreate(
-      checkpointPath: String,
-      creatingFunc: () => StreamingContext,
-      hadoopConf: Configuration = new Configuration(),
-      createOnError: Boolean = false
-    ): StreamingContext = {
+                   checkpointPath: String,
+                   creatingFunc: () => StreamingContext,
+                   hadoopConf: Configuration = new Configuration(),
+                   createOnError: Boolean = false
+                   ): StreamingContext = {
     val checkpointOption = try {
       CheckpointReader.read(checkpointPath,  new SparkConf(), hadoopConf)
     } catch {
@@ -580,12 +596,12 @@ object StreamingContext extends Logging {
   }
 
   private[streaming] def createNewSparkContext(
-      master: String,
-      appName: String,
-      sparkHome: String,
-      jars: Seq[String],
-      environment: Map[String, String]
-    ): SparkContext = {
+                                                master: String,
+                                                appName: String,
+                                                sparkHome: String,
+                                                jars: Seq[String],
+                                                environment: Map[String, String]
+                                                ): SparkContext = {
     val conf = SparkContext.updatedConf(
       new SparkConf(), master, appName, sparkHome, jars, environment)
     createNewSparkContext(conf)
@@ -601,3 +617,4 @@ object StreamingContext extends Logging {
     }
   }
 }
+

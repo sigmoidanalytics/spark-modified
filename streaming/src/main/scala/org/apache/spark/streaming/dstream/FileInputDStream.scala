@@ -19,6 +19,11 @@ package org.apache.spark.streaming.dstream
 
 import java.io.{IOException, ObjectInputStream}
 import java.util
+import scala.collection.JavaConverters._
+
+import com.amazonaws.auth.BasicAWSCredentials
+import com.amazonaws.services.s3.AmazonS3Client
+import com.amazonaws.services.s3.model.ListObjectsRequest
 
 import scala.collection.mutable
 import scala.reflect.ClassTag
@@ -75,7 +80,8 @@ class FileInputDStream[K: ClassTag,
      directory: String,
      filter: Path => Boolean = FileInputDStream.defaultFilter,
      newFilesOnly: Boolean = true,
-     recursive: Boolean = false)
+     recursive: Boolean = false,
+     s3: Boolean)
   extends InputDStream[(K, V)](ssc_) {
 
 
@@ -84,13 +90,23 @@ class FileInputDStream[K: ClassTag,
            filter: Path => Boolean,
            newFilesOnly: Boolean){
 
-    this(ssc_,directory,filter,newFilesOnly,false)
+    this(ssc_,directory,filter,newFilesOnly,false,false)
+
+  }
+
+  def this(@transient ssc_ : StreamingContext,
+           directory: String,
+           filter: Path => Boolean,
+           newFilesOnly: Boolean,
+           recursive: Boolean){
+
+    this(ssc_,directory,filter,newFilesOnly,recursive,false)
 
   }
 
   def this(@transient ssc_ : StreamingContext, directory: String){
 
-    this(ssc_,directory,null,true,false)
+    this(ssc_,directory,null,true,false,false)
 
   }
 
@@ -185,6 +201,60 @@ class FileInputDStream[K: ClassTag,
   }
 
   /**
+   * This one's for finding new S3 files.
+   */
+  private def findNewS3Files(currentTime: Long, modTimeIgnoreThreshold: Long): Array[String] ={
+
+    if(System.getenv("AWS_ACCESS_KEY") == null || System.getenv("AWS_SECRET_KEY") == null){
+      logInfo("You need to set AWS_ACCESS_KEY and AWS_SECRET_KEY in the environment " +
+        "for s3filestream to work.")
+      System.exit(1)
+    }
+    val creds = new BasicAWSCredentials(System.getenv("AWS_ACCESS_KEY"),
+                      System.getenv("AWS_SECRET_KEY"))
+
+    val startTime = System.currentTimeMillis()
+
+    val client = new AmazonS3Client(creds)
+
+    val bucketName = directoryPath.getName.split("/")(0)
+    val prefix = directoryPath.getName.substring(directoryPath.getName.split("/")(0).length,
+                        directoryPath.getName.length)
+
+    logInfo("Looking in Bucket : " + bucketName +
+             " with prefix :" + prefix)
+
+    val listObjects = client.listObjects(new ListObjectsRequest().
+      withBucketName(bucketName).
+      withPrefix(prefix))
+
+    val summaries = listObjects.getObjectSummaries.asScala
+    var filesList: List[String] = List()
+
+    for (summary <- summaries){
+      /*logInfo(summary.getKey + " Modified at: " +
+        summary.getLastModified.getTime + " | " + currentTime + " | " + modTimeIgnoreThreshold)*/
+      if(summary.getSize > 0 && summary.getLastModified.getTime <= currentTime
+          && summary.getLastModified.getTime >= modTimeIgnoreThreshold
+          && !recentlySelectedFiles.contains("s3n://" +
+             System.getenv("AWS_ACCESS_KEY") + ":" +
+             System.getenv("AWS_SECRET_KEY") + "@" +
+             summary.getBucketName + "/" + summary.getKey)
+       ){
+        filesList = filesList :+
+          "s3n://" + System.getenv("AWS_ACCESS_KEY") + ":" +
+            System.getenv("AWS_SECRET_KEY") + "@" +
+            summary.getBucketName + "/" + summary.getKey
+        /*logInfo("Found new File: " + "s3n://" + System.getenv("AWS_ACCESS_KEY") + ":" +
+          System.getenv("AWS_SECRET_KEY") + "@" +
+          summary.getBucketName + "/" + summary.getKey)*/
+      }
+    }
+
+    filesList.toArray
+
+  }
+  /**
    * Find new files for the batch of `currentTime`. This is done by first calculating the
    * ignore threshold for file mod times, and then getting a list of files filtered based on
    * the current batch time and the ignore threshold. The ignore threshold is the max of
@@ -207,7 +277,7 @@ class FileInputDStream[K: ClassTag,
       }
       //val newFiles = fs.listStatus(directoryPath, filter).map(_.getPath.toString)
       filesList = List[Path]()
-      val filePaths: Array[Path] = if (recursive){
+      val filePaths: Array[Path] = if (recursive && !s3){
         recursiveFileList(directoryPath)
         filesList.toArray
       }
@@ -215,7 +285,14 @@ class FileInputDStream[K: ClassTag,
         Array(directoryPath)
       }
 
-      val newFiles: Array[String] = fs.listStatus(filePaths, filter).map(_.getPath.toString)
+      var newFiles: Array[String] = null
+
+      if(!s3){
+        newFiles = fs.listStatus(filePaths, filter).map(_.getPath.toString)
+      }else{
+        newFiles = findNewS3Files(currentTime, modTimeIgnoreThreshold)
+      }
+
       //logInfo("minNewFileModTime: " ++ filter.minNewFileModTime.toString)
 
       val timeTaken = clock.currentTime() - lastNewFileFindingTime

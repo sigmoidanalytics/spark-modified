@@ -283,6 +283,13 @@
          specific groovy scripts using gmaven+ and not required for downstream project building
          with spark.
     -->
+    <!-- Dependency for AWS SDK for s3Filestream
+    -->
+     <dependency>
+       <groupId>com.amazonaws</groupId>
+       <artifactId>aws-java-sdk</artifactId>
+       <version>1.9.24</version>
+     </dependency>
     <dependency>
       <groupId>org.codehaus.groovy</groupId>
       <artifactId>groovy-all</artifactId>
