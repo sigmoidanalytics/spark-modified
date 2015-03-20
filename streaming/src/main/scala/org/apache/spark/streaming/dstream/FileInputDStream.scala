@@ -228,11 +228,18 @@ class FileInputDStream[K: ClassTag,
     logInfo("Looking in Bucket : " + bucketName +
              " with prefix :" + prefix)
 
-    val listObjects = client.listObjects(new ListObjectsRequest().
+    var listObjects = client.listObjects(new ListObjectsRequest().
       withBucketName(bucketName).
       withPrefix(prefix))
 
-    val summaries = listObjects.getObjectSummaries.asScala
+    var _summaries = listObjects.getObjectSummaries
+
+    while (listObjects.isTruncated()) {
+      listObjects = client.listNextBatchOfObjects (listObjects)
+      _summaries.addAll (listObjects.getObjectSummaries())
+    }
+   
+    val  summaries = _summaries.asScala
     var filesList: List[String] = List()
 
     for (summary <- summaries){
